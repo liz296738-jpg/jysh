@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from src.audit_workbook import audit_workbook
 from src.batch_rules import apply_batch_contact_phone_duplicates
@@ -51,11 +51,6 @@ def create_app(config=None):
     def manager():
         return ReferenceManager(app.config["REFERENCE_PATH"], app.config["REFERENCE_BACKUP_ROOT"], app.config["REFERENCE_CHANGE_LOG"])
 
-    def is_reference_admin():
-        return bool(app.config["REFERENCE_ADMIN_PASSWORD"]) and session.get("reference_admin") is True
-
-    def require_reference_admin():
-        if not is_reference_admin(): abort(403)
 
     @app.before_request
     def _cleanup(): cleanup()
@@ -65,15 +60,6 @@ def create_app(config=None):
         try: reference_count = len(ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"], require_high_confidence=True).by_credit_code)
         except Exception: reference_count = 0
         return render_template("index.html", reference_ready=reference_ready(), reference_count=reference_count)
-
-    @app.route("/reference/login", methods=["GET", "POST"])
-    def reference_login():
-        if request.method == "POST":
-            if app.config["REFERENCE_ADMIN_PASSWORD"] and request.form.get("password") == app.config["REFERENCE_ADMIN_PASSWORD"]:
-                session["reference_admin"] = True
-                return redirect(url_for("reference_list"))
-            return render_template("error.html", message="管理员口令无效或未配置。"), 403
-        return render_template("reference_login.html")
 
     @app.get("/reference")
     def reference_list():
@@ -90,11 +76,10 @@ def create_app(config=None):
         total_pages = max((len(rows) + per_page - 1) // per_page, 1)
         page = min(page, total_pages)
         start = (page - 1) * per_page
-        return render_template("reference_list.html", rows=rows[start:start + per_page], total=len(manager().records()), query=query, page=page, total_pages=total_pages, per_page=per_page, is_admin=is_reference_admin())
+        return render_template("reference_list.html", rows=rows[start:start + per_page], total=len(manager().records()), query=query, page=page, total_pages=total_pages, per_page=per_page, is_admin=True)
 
     @app.route("/reference/new", methods=["GET", "POST"])
     def reference_new():
-        require_reference_admin()
         current_manager = manager()
         if request.method == "POST":
             try:
@@ -107,7 +92,6 @@ def create_app(config=None):
 
     @app.route("/reference/<credit_code>/edit", methods=["GET", "POST"])
     def reference_edit(credit_code):
-        require_reference_admin()
         current_manager = manager()
         original = current_manager.find(credit_code)
         if original is None: abort(404)

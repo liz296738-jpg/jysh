@@ -32,7 +32,7 @@ Start Command：`gunicorn app:app --workers 1 --threads 4 --timeout 120`
 
 ### 参考库管理
 
-访问 `/reference` 可分页查看并按单位名称或统一社会信用代码包含搜索。新增和编辑需要设置环境变量 `REFERENCE_ADMIN_PASSWORD` 后通过管理员口令登录；未设置该变量时，管理写入默认拒绝。
+访问 `/reference` 可分页查看并按单位名称或统一社会信用代码包含搜索。所有访问者均可直接新增和编辑企业信息；保存仍必须通过后端完整性与唯一性校验。
 
 每次保存均由后端校验四项字段、18 位信用代码格式、信用代码唯一性和名称—信用代码一对一关系。系统先写入并校验临时 Excel，再原子替换正式库；旧文件保存到 `backups/reference/`（保留最近 30 个），企业字段变更写入 `reference_change_log.jsonl`。这些运行时文件不提交 Git。
 
