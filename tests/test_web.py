@@ -17,7 +17,7 @@ def client(tmp_path):
 
 def test_home_and_health(client):
     assert client.get("/").status_code == 200
-    assert "初审预审" in client.get("/").get_data(as_text=True)
+    assert "上传初审数据" in client.get("/").get_data(as_text=True)
     assert client.get("/health").get_json() == {"status": "ok"}
 
 

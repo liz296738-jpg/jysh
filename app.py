@@ -61,7 +61,10 @@ def create_app(config=None):
     def _cleanup(): cleanup()
 
     @app.get("/")
-    def index(): return render_template("index.html", reference_ready=reference_ready())
+    def index():
+        try: reference_count = len(ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"], require_high_confidence=True).by_credit_code)
+        except Exception: reference_count = 0
+        return render_template("index.html", reference_ready=reference_ready(), reference_count=reference_count)
 
     @app.route("/reference/login", methods=["GET", "POST"])
     def reference_login():
