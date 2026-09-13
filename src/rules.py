@@ -118,7 +118,7 @@ class AuditEngine:
                     _issue(
                         "credit_code_history_match",
                         FIELD_MAP["credit_code"],
-                        "统一社会信用代码未命中历史参考库，请人工核实",
+                        "该企业未命中高可信企业参考库，请人工核实",
                         credit_code,
                         "",
                         (FIELD_MAP["credit_code"],),

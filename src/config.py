@@ -22,3 +22,7 @@ FIELD_MAP = {
 }
 
 TRUSTED_AUDIT_STATUS = "审核完成"
+
+# 当前静态高可信企业参考库的数据完整性校验值，不是审核业务规则。
+EXPECTED_REFERENCE_COUNT = 4356
+HIGH_CONFIDENCE_REFERENCE_HEADERS = ("dwmc", "dwzzjgdm", "dwxz", "dwhy")

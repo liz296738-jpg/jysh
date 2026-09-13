@@ -44,7 +44,7 @@ def create_app(config=None):
         return path
 
     def reference_ready():
-        try: ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"]); return True
+        try: ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"], require_high_confidence=True); return True
         except Exception: return False
 
     @app.before_request
@@ -66,7 +66,7 @@ def create_app(config=None):
         task_id = uuid.uuid4().hex; folder = Path(app.config["TEMP_ROOT"]) / task_id; folder.mkdir()
         input_path = folder / "original.xlsx"; upload.save(input_path)
         try:
-            parsed = ExcelParser(FIELD_MAP).read(input_path); engine = AuditEngine(ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"])); review_stage = ReviewStage(stage.upper()); results = [engine.audit(row, index + 2, review_stage) for index, row in enumerate(parsed.rows)]; apply_batch_contact_phone_duplicates(results, parsed.rows)
+            parsed = ExcelParser(FIELD_MAP).read(input_path); engine = AuditEngine(ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"], require_high_confidence=True)); review_stage = ReviewStage(stage.upper()); results = [engine.audit(row, index + 2, review_stage) for index, row in enumerate(parsed.rows)]; apply_batch_contact_phone_duplicates(results, parsed.rows)
         except Exception as error:
             shutil.rmtree(folder, ignore_errors=True); return render_template("error.html", message=f"Excel 无法审核：{error}"), 400
         data = {"task_id": task_id, "review_stage": stage, "created_at": datetime.now(timezone.utc).isoformat(), "results": [_serialize(r) for r in results]}
@@ -79,7 +79,7 @@ def create_app(config=None):
 
     @app.post("/export/<task_id>")
     def export(task_id):
-        folder=task_path(task_id); data=json.loads((folder / "result.json").read_text(encoding="utf-8")); outcome=audit_workbook(folder / "original.xlsx", data["review_stage"], app.config["REFERENCE_PATH"])
+        folder=task_path(task_id); data=json.loads((folder / "result.json").read_text(encoding="utf-8")); outcome=audit_workbook(folder / "original.xlsx", data["review_stage"], app.config["REFERENCE_PATH"], require_high_confidence_reference=True)
         workbook_bytes = outcome.output_path.read_bytes()
         download_name = outcome.output_path.name
         shutil.rmtree(folder, ignore_errors=True)

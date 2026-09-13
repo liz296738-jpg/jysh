@@ -124,6 +124,7 @@ def audit_workbook(
     input_path: str | Path,
     review_stage: str | ReviewStage,
     reference_path: str | Path | None = None,
+    require_high_confidence_reference: bool = False,
 ) -> AuditWorkbookOutcome:
     """Audit a single export without changing it and write a sibling result workbook."""
     source_path = Path(input_path)
@@ -131,7 +132,11 @@ def audit_workbook(
     project_root = Path(__file__).resolve().parents[1]
     library_path = Path(reference_path) if reference_path else project_root / "企业参考库.xlsx"
     parsed = ExcelParser(FIELD_MAP).read(source_path)
-    engine = AuditEngine(ReferenceLibrary.from_workbook(library_path))
+    engine = AuditEngine(
+        ReferenceLibrary.from_workbook(
+            library_path, require_high_confidence=require_high_confidence_reference
+        )
+    )
     results = [
         engine.audit(row, index + 2, stage)
         for index, row in enumerate(parsed.rows)

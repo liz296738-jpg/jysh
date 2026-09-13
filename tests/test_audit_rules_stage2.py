@@ -85,7 +85,7 @@ def test_unknown_credit_code_requires_manual_review():
 
     result = _audit(reference, _student_row(reference, dwzzjgdm="999999999999999999"))
 
-    assert [issue.message for issue in result.issues] == ["统一社会信用代码未命中历史参考库，请人工核实"]
+    assert [issue.message for issue in result.issues] == ["该企业未命中高可信企业参考库，请人工核实"]
 
 
 def test_conflicting_reference_credit_code_requires_manual_review():

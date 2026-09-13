@@ -14,7 +14,6 @@ real_data/
 build/
 package_dist/
 package_dist_tk/
-legacy/
 就业预审工具/
 *.spec
 __pycache__/

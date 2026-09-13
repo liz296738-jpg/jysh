@@ -8,7 +8,12 @@ from typing import Any, Iterable
 
 from openpyxl import Workbook, load_workbook
 
-from .config import FIELD_MAP, TRUSTED_AUDIT_STATUS
+from .config import (
+    EXPECTED_REFERENCE_COUNT,
+    FIELD_MAP,
+    HIGH_CONFIDENCE_REFERENCE_HEADERS,
+    TRUSTED_AUDIT_STATUS,
+)
 from .normalization import normalize_company_name, normalize_credit_code, normalize_text
 
 
@@ -33,8 +38,34 @@ _REFERENCE_FIELD_KEYS = (
 )
 
 
+class ReferenceLibraryIntegrityError(ValueError):
+    """Raised when the static high-confidence reference library is invalid."""
+
+
 def _clean_value(value: Any) -> str:
     return normalize_text(value)
+
+
+def _is_missing_high_confidence_value(value: Any) -> bool:
+    return _clean_value(value) in {"", "30"}
+
+
+def _validate_high_confidence_records(records: list["ReferenceRecord"]) -> None:
+    """Validate the current approved library version before it reaches audit rules."""
+    if len(records) != EXPECTED_REFERENCE_COUNT:
+        raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
+    codes: set[str] = set()
+    names_to_codes: dict[str, set[str]] = {}
+    for record in records:
+        values = (record.company_name, record.credit_code, record.company_type, record.industry)
+        if any(_is_missing_high_confidence_value(value) for value in values):
+            raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
+        if record.credit_code in codes:
+            raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
+        codes.add(record.credit_code)
+        names_to_codes.setdefault(normalize_company_name(record.company_name), set()).add(record.credit_code)
+    if len(codes) != EXPECTED_REFERENCE_COUNT or any(len(codes) != 1 for codes in names_to_codes.values()):
+        raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
 
 
 @dataclass(frozen=True)
@@ -132,11 +163,33 @@ class ReferenceLibrary:
                 self.by_company_name[normalize_company_name(record.company_name)] = record
 
     @classmethod
-    def from_workbook(cls, path: Path) -> "ReferenceLibrary":
+    def from_workbook(
+        cls, path: Path, *, require_high_confidence: bool = False
+    ) -> "ReferenceLibrary":
         workbook = load_workbook(path, read_only=True, data_only=True)
         try:
             sheet = workbook.active
             headers = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
+            if set(headers) == set(HIGH_CONFIDENCE_REFERENCE_HEADERS) and len(headers) == len(HIGH_CONFIDENCE_REFERENCE_HEADERS):
+                records = []
+                for values in sheet.iter_rows(min_row=2, values_only=True):
+                    row = dict(zip(headers, values))
+                    records.append(
+                        ReferenceRecord(
+                            credit_code=normalize_credit_code(row["dwzzjgdm"]),
+                            company_name=_clean_value(row["dwmc"]),
+                            company_type=_clean_value(row["dwxz"]),
+                            company_type_code="",
+                            industry=_clean_value(row["dwhy"]),
+                            industry_code="",
+                            reference_conflict=False,
+                            conflict_fields=(),
+                        )
+                    )
+                _validate_high_confidence_records(records)
+                return cls(records)
+            if require_high_confidence:
+                raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
             missing = set(REFERENCE_HEADERS) - set(headers)
             if missing:
                 raise ValueError(f"企业参考库缺少列：{', '.join(sorted(missing))}")
