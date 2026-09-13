@@ -1,0 +1,3 @@
+document.querySelectorAll('form.card').forEach(form=>form.addEventListener('submit',()=>{form.querySelector('button').disabled=true;form.querySelector('button').textContent='正在审核数据，请稍候…'}));
+document.querySelectorAll('form.card input[type="file"]').forEach(input=>input.addEventListener('change',()=>{if(input.files.length){input.form.requestSubmit()}}));
+const labels={'企业信息':'credit_code company_name','电话':'phone duplicate','单位行业':'industry','单位性质':'company_type','工作职位':'job_category'};document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>document.querySelectorAll('tbody tr').forEach(r=>r.hidden=b.dataset.filter!=='all'&&!labels[b.dataset.filter].split(' ').some(x=>r.dataset.rules.includes(x)))));

@@ -1,0 +1,21 @@
+# Runtime-only student data and generated reports
+uploads/
+temp/
+output/
+instance/
+*.log
+.env
+
+# Private original data must never enter Git. Public samples are synthetic only.
+private_samples/
+real_data/
+
+# Desktop packaging artifacts retired by the web deployment.
+build/
+package_dist/
+package_dist_tk/
+legacy/
+就业预审工具/
+*.spec
+__pycache__/
+.pytest_cache/
