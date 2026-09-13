@@ -50,9 +50,11 @@ def _is_missing_high_confidence_value(value: Any) -> bool:
     return _clean_value(value) in {"", "30"}
 
 
-def _validate_high_confidence_records(records: list["ReferenceRecord"]) -> None:
+def _validate_high_confidence_records(
+    records: list["ReferenceRecord"], *, enforce_baseline_count: bool = False
+) -> None:
     """Validate the current approved library version before it reaches audit rules."""
-    if len(records) != EXPECTED_REFERENCE_COUNT:
+    if enforce_baseline_count and len(records) != EXPECTED_REFERENCE_COUNT:
         raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
     codes: set[str] = set()
     names_to_codes: dict[str, set[str]] = {}
@@ -64,7 +66,7 @@ def _validate_high_confidence_records(records: list["ReferenceRecord"]) -> None:
             raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
         codes.add(record.credit_code)
         names_to_codes.setdefault(normalize_company_name(record.company_name), set()).add(record.credit_code)
-    if len(codes) != EXPECTED_REFERENCE_COUNT or any(len(codes) != 1 for codes in names_to_codes.values()):
+    if (enforce_baseline_count and len(codes) != EXPECTED_REFERENCE_COUNT) or any(len(codes) != 1 for codes in names_to_codes.values()):
         raise ReferenceLibraryIntegrityError("企业高可信参考库完整性校验失败")
 
 

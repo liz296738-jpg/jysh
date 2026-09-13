@@ -2,6 +2,8 @@
 uploads/
 temp/
 output/
+backups/
+reference_change_log.jsonl
 instance/
 *.log
 .env

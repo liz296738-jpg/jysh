@@ -8,13 +8,14 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from src.audit_workbook import audit_workbook
 from src.batch_rules import apply_batch_contact_phone_duplicates
 from src.config import FIELD_MAP
 from src.excel_parser import ExcelParser
 from src.reference import ReferenceLibrary
+from src.reference_manager import ReferenceManagementError, ReferenceManager
 from src.rules import AuditEngine, ReviewStage
 
 
@@ -27,7 +28,7 @@ def _serialize(result):
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.config.update(SECRET_KEY=os.getenv("SECRET_KEY") or os.urandom(32), MAX_CONTENT_LENGTH=int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024, TEMP_ROOT=ROOT / "temp", REFERENCE_PATH=ROOT / "企业参考库.xlsx", TASK_TTL_MINUTES=int(os.getenv("TASK_TTL_MINUTES", "120")))
+    app.config.update(SECRET_KEY=os.getenv("SECRET_KEY") or os.urandom(32), MAX_CONTENT_LENGTH=int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024, TEMP_ROOT=ROOT / "temp", REFERENCE_PATH=ROOT / "企业参考库.xlsx", TASK_TTL_MINUTES=int(os.getenv("TASK_TTL_MINUTES", "120")), REFERENCE_BACKUP_ROOT=ROOT / "backups" / "reference", REFERENCE_CHANGE_LOG=ROOT / "reference_change_log.jsonl", REFERENCE_ADMIN_PASSWORD=os.getenv("REFERENCE_ADMIN_PASSWORD", ""))
     if config:
         app.config.update(config)
     Path(app.config["TEMP_ROOT"]).mkdir(parents=True, exist_ok=True)
@@ -47,11 +48,74 @@ def create_app(config=None):
         try: ReferenceLibrary.from_workbook(app.config["REFERENCE_PATH"], require_high_confidence=True); return True
         except Exception: return False
 
+    def manager():
+        return ReferenceManager(app.config["REFERENCE_PATH"], app.config["REFERENCE_BACKUP_ROOT"], app.config["REFERENCE_CHANGE_LOG"])
+
+    def is_reference_admin():
+        return bool(app.config["REFERENCE_ADMIN_PASSWORD"]) and session.get("reference_admin") is True
+
+    def require_reference_admin():
+        if not is_reference_admin(): abort(403)
+
     @app.before_request
     def _cleanup(): cleanup()
 
     @app.get("/")
     def index(): return render_template("index.html", reference_ready=reference_ready())
+
+    @app.route("/reference/login", methods=["GET", "POST"])
+    def reference_login():
+        if request.method == "POST":
+            if app.config["REFERENCE_ADMIN_PASSWORD"] and request.form.get("password") == app.config["REFERENCE_ADMIN_PASSWORD"]:
+                session["reference_admin"] = True
+                return redirect(url_for("reference_list"))
+            return render_template("error.html", message="管理员口令无效或未配置。"), 403
+        return render_template("reference_login.html")
+
+    @app.get("/reference")
+    def reference_list():
+        try:
+            rows = manager().records()
+        except Exception:
+            return render_template("error.html", message="企业参考库异常，请联系管理员。"), 503
+        query = request.args.get("q", "").strip()
+        if query:
+            normalized = query.upper().replace(" ", "")
+            rows = [row for row in rows if query.casefold() in row["dwmc"].casefold() or normalized in row["dwzzjgdm"].upper()]
+        per_page = 100 if request.args.get("per_page") == "100" else 50
+        page = max(request.args.get("page", 1, type=int), 1)
+        total_pages = max((len(rows) + per_page - 1) // per_page, 1)
+        page = min(page, total_pages)
+        start = (page - 1) * per_page
+        return render_template("reference_list.html", rows=rows[start:start + per_page], total=len(manager().records()), query=query, page=page, total_pages=total_pages, per_page=per_page, is_admin=is_reference_admin())
+
+    @app.route("/reference/new", methods=["GET", "POST"])
+    def reference_new():
+        require_reference_admin()
+        current_manager = manager()
+        if request.method == "POST":
+            try:
+                current_manager.save("ADD", request.form)
+            except ReferenceManagementError as error:
+                return render_template("reference_form.html", record=request.form, choices=current_manager.choices(), title="新增企业", action_url=url_for("reference_new"), error=str(error)), 400
+            flash("企业已成功加入高可信参考库。")
+            return redirect(url_for("reference_list"))
+        return render_template("reference_form.html", record={}, choices=current_manager.choices(), title="新增企业", action_url=url_for("reference_new"), error=None)
+
+    @app.route("/reference/<credit_code>/edit", methods=["GET", "POST"])
+    def reference_edit(credit_code):
+        require_reference_admin()
+        current_manager = manager()
+        original = current_manager.find(credit_code)
+        if original is None: abort(404)
+        if request.method == "POST":
+            try:
+                current_manager.save("EDIT", request.form, credit_code)
+            except ReferenceManagementError as error:
+                return render_template("reference_form.html", record=request.form, choices=current_manager.choices(), title="编辑企业", action_url=url_for("reference_edit", credit_code=credit_code), error=str(error)), 400
+            flash("企业信息已更新并保存。")
+            return redirect(url_for("reference_list", q=request.form.get("dwzzjgdm", "")))
+        return render_template("reference_form.html", record=original, choices=current_manager.choices(), title="编辑企业", action_url=url_for("reference_edit", credit_code=credit_code), error=None)
 
     @app.get("/health")
     def health(): return jsonify(status="ok")
